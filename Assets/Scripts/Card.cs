@@ -1,6 +1,5 @@
 ﻿using System;
 
-// 扑克牌数据结构
 public struct Card
 {
     public enum Suit { 黑桃, 红桃, 梅花, 方块 }
@@ -33,6 +32,6 @@ public struct Card
 
     public override string ToString()
     {
-        return $"{rank} of {suit}";
+        return $"{suit} {rank}";
     }
 }

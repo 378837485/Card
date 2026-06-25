@@ -1,63 +1,51 @@
-using System;
+ï»¿using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 
+/// <summary>
+/// ç‰Œå‹æšä¸¾
+/// </summary>
+public enum HandType
+{
+    HighCard, //é«˜ç‰Œ
+    OnePair, //ä¸€å¯¹
+    TwoPair, //ä¸¤å¯¹
+    ThreeOfAKind, //ä¸‰æ¡
+    Straight, //é¡ºå­
+    Flush, //åŒèŠ±
+    FullHouse, //è‘«èŠ¦
+    FourOfAKind, //å››æ¡
+    StraightFlush //åŒèŠ±é¡º
+}
+
+/// <summary>
+/// è¾…åŠ©æ•°æ®ç»“æ„
+/// </summary>
+public class PlayerOdds
+{
+    public int playerIndex;
+    public float winRate;
+    public float tieRate;
+    public float loseRate;
+    public List<Card[]> winningBoards; // èµ¢ç‰Œæ—¶çš„å…¬å…±ç‰Œç»„åˆï¼ˆæœ€å¤šå­˜å‚¨æŒ‡å®šæ•°é‡ï¼‰
+
+    public override string ToString()
+    {
+        int count = winningBoards?.Count ?? 0;
+        return $"ç©å®¶{playerIndex + 1}: èƒœ{winRate:P2} å¹³{tieRate:P2} è´Ÿ{loseRate:P2} (å±•ç¤ºå‰{count}ç§èµ¢ç‰Œç»„åˆ)";
+    }
+}
+
+// ====================== ä¸»è¯„ä¼°å™¨ ======================
 public static class PokerHandEvaluator
 {
-    /// <summary>
-    /// ´«ÈëÃ¿¸öÍæ¼ÒµÄÊÖÅÆ£¨2ÕÅ£©ºÍ¹«¹²ÅÆ£¨5ÕÅ£©£¬·µ»ØÓ®¼ÒµÄË÷ÒıÁĞ±í£¨¿ÉÄÜÓĞ¶à¸ö£¬Æ½¾Ö£©¡£
-    /// </summary>
-    public static List<int> DetermineWinners(List<List<Card>> playerHands, List<Card> communityCards)
-    {
-        if (communityCards.Count != 5)
-            throw new ArgumentException("¹«¹²ÅÆ±ØĞëÇ¡ºÃ5ÕÅ");
-
-        // ´æ´¢Ã¿¸öÍæ¼ÒµÄ×î¼Ñ5ÕÅÅÆ×éºÏ
-        List<Card[]> bestHands = new List<Card[]>();
-        foreach (var hand in playerHands)
-        {
-            if (hand.Count != 2)
-                throw new ArgumentException("Ã¿¸öÍæ¼ÒÊÖÅÆ±ØĞëÇ¡ºÃ2ÕÅ");
-
-            // ºÏ²¢7ÕÅÅÆ
-            Card[] seven = new Card[7];
-            seven[0] = hand[0];
-            seven[1] = hand[1];
-            for (int i = 0; i < 5; i++)
-                seven[2 + i] = communityCards[i];
-
-            // Ñ¡³ö×î¼Ñ5ÕÅ
-            Card[] best = GetBestFiveCards(seven);
-            bestHands.Add(best);
-        }
-
-        // ÕÒ³ö×îÇ¿µÄÊÖÅÆ
-        int bestIndex = 0;
-        List<int> winners = new List<int> { 0 };
-        for (int i = 1; i < bestHands.Count; i++)
-        {
-            int cmp = CompareFiveCardHands(bestHands[i], bestHands[bestIndex]);
-            if (cmp > 0) // µ±Ç°Íæ¼Ò¸üÇ¿
-            {
-                bestIndex = i;
-                winners.Clear();
-                winners.Add(i);
-            }
-            else if (cmp == 0) // Æ½¾Ö
-            {
-                winners.Add(i);
-            }
-        }
-        return winners;
-    }
-
-    // ---------- ´Ó7ÕÅÅÆÖĞÑ¡³ö×î¼Ñ5ÕÅ ----------
-    private static Card[] GetBestFiveCards(Card[] seven)
+    // ---------- 1. ä»7å¼ ç‰Œä¸­é€‰å‡ºæœ€ä½³5å¼  ----------
+    public static Card[] GetBestFiveCards(Card[] seven)
     {
         Card[] best = null;
         HandStrength bestStrength = null;
 
-        // Ã¶¾ÙËùÓĞ C(7,5)=21 ÖÖ×éºÏ
         for (int a = 0; a < 3; a++)
             for (int b = a + 1; b < 4; b++)
                 for (int c = b + 1; c < 5; c++)
@@ -75,20 +63,507 @@ public static class PokerHandEvaluator
         return best;
     }
 
-    // ---------- ±È½ÏÁ½¸ö5ÕÅÅÆ×éºÏ£¨·µ»Ø1,0,-1£© ----------
-    private static int CompareFiveCardHands(Card[] handA, Card[] handB)
+    /// <summary>
+    /// åˆ¤å®šèµ¢å®¶ï¼ˆæ”¯æŒå¹³å±€ï¼‰
+    /// </summary>
+    /// <param name="playerHands">æ‰€æœ‰ç©å®¶æ‰‹ç‰Œç»„</param>
+    /// <param name="communityCards">å…¬å…±æ± ç‰Œç»„</param>
+    /// <returns>è¿”å›èµ¢å®¶ç©å®¶index</returns>
+    /// <exception cref="ArgumentException"></exception>
+    public static List<int> DetermineWinners(List<List<Card>> playerHands, List<Card> communityCards)
     {
-        var sa = GetHandStrength(handA);
-        var sb = GetHandStrength(handB);
-        return CompareStrength(sa, sb);
+        if (communityCards.Count != 5)
+            throw new ArgumentException("å…¬å…±ç‰Œå¿…é¡»æ°å¥½5å¼ ");
+
+        List<Card[]> bestHands = new List<Card[]>();
+        foreach (var hand in playerHands)
+        {
+            if (hand.Count != 2)
+                throw new ArgumentException("æ¯æ‰‹ç‰Œå¿…é¡»æ°å¥½2å¼ ");
+
+            Card[] seven = new Card[7];
+            seven[0] = hand[0];
+            seven[1] = hand[1];
+            for (int i = 0; i < 5; i++)
+                seven[2 + i] = communityCards[i];
+
+            bestHands.Add(GetBestFiveCards(seven));
+        }
+
+        int bestIdx = 0;
+        List<int> winners = new List<int> { 0 };
+        for (int i = 1; i < bestHands.Count; i++)
+        {
+            int cmp = CompareFiveCardHands(bestHands[i], bestHands[bestIdx]);
+            if (cmp > 0)
+            {
+                bestIdx = i;
+                winners.Clear();
+                winners.Add(i);
+            }
+            else if (cmp == 0)
+            {
+                winners.Add(i);
+            }
+        }
+        return winners;
     }
 
-    // ---------- ÊÖÅÆÇ¿¶ÈÊı¾İ½á¹¹ ----------
+    /// <summary>
+    /// æœ€ç»ˆç»„æˆæŒ‡å®šå¼ºç‰Œå‹æ¦‚ç‡
+    /// </summary>
+    /// <param name="playerHand">ç©å®¶æ‰‹ç‰Œ</param>
+    /// <param name="communityCards">å…¬å…±æ± ç‰Œç»„</param>
+    /// <returns></returns>
+    public static Dictionary<HandType, float> GetFinalHandProbabilities(
+        List<Card> playerHand,
+        List<Card> communityCards)
+    {
+        HashSet<HandType> targetTypes = new HashSet<HandType>
+        {
+            HandType.TwoPair, HandType.ThreeOfAKind, HandType.Straight,
+            HandType.Flush, HandType.FullHouse, HandType.FourOfAKind, HandType.StraightFlush
+        };
+
+        Card[] allCards = GetAllCardsArray();
+        bool[] used = new bool[52];
+        MarkUsed(used, playerHand);
+        MarkUsed(used, communityCards);
+
+        List<Card> remaining = new List<Card>();
+        for (int i = 0; i < allCards.Length; i++)
+            if (!used[i]) remaining.Add(allCards[i]);
+
+        int slots = 5 - communityCards.Count;
+        int total = 0;
+        int[] counts = new int[9];
+
+        Card[] finalSeven = new Card[7];
+        finalSeven[0] = playerHand[0];
+        finalSeven[1] = playerHand[1];
+        for (int i = 0; i < communityCards.Count; i++)
+            finalSeven[2 + i] = communityCards[i];
+
+        if (slots == 0)
+        {
+            HandType t = EvaluateBestHand(finalSeven);
+            if (targetTypes.Contains(t)) counts[(int)t] = 1;
+            total = 1;
+        }
+        else if (slots == 1)
+        {
+            foreach (var c in remaining)
+            {
+                finalSeven[2 + communityCards.Count] = c;
+                HandType t = EvaluateBestHand(finalSeven);
+                if (targetTypes.Contains(t)) counts[(int)t]++;
+                total++;
+            }
+        }
+        else if (slots == 2)
+        {
+            for (int i = 0; i < remaining.Count; i++)
+            {
+                finalSeven[2 + communityCards.Count] = remaining[i];
+                for (int j = i + 1; j < remaining.Count; j++)
+                {
+                    finalSeven[3 + communityCards.Count] = remaining[j];
+                    HandType t = EvaluateBestHand(finalSeven);
+                    if (targetTypes.Contains(t)) counts[(int)t]++;
+                    total++;
+                }
+            }
+        }
+        else // slots == 5 (ç¿»ç‰Œå‰)
+        {
+            int[] indices = new int[5];
+            GenerateCombos(remaining, slots, 0, 0, indices, (combo) =>
+            {
+                for (int i = 0; i < 5; i++)
+                    finalSeven[2 + i] = combo[i];
+                HandType t = EvaluateBestHand(finalSeven);
+                if (targetTypes.Contains(t)) counts[(int)t]++;
+                total++;
+            });
+        }
+
+        Dictionary<HandType, float> result = new Dictionary<HandType, float>();
+        foreach (var t in targetTypes)
+            result[t] = (float)counts[(int)t] / total;
+        return result;
+    }
+
+    /// <summary>
+    /// ä¸‹ä¸€å¼ è¡¥ç‰Œæ¦‚ç‡
+    /// </summary>
+    /// <param name="playerHand">ç©å®¶æ‰‹ç‰Œ</param>
+    /// <param name="communityCards">å…¬å…±æ± ç‰Œç»„</param>
+    /// <param name="targetRank"></param>
+    /// <param name="targetSuit"></param>
+    /// <returns></returns>
+    public static float GetNextCardOutsProbability(
+        List<Card> playerHand,
+        List<Card> communityCards,
+        Card.Rank? targetRank = null,
+        Card.Suit? targetSuit = null)
+    {
+        Card[] allCards = GetAllCardsArray();
+        bool[] used = new bool[52];
+        MarkUsed(used, playerHand);
+        MarkUsed(used, communityCards);
+
+        int hit = 0, total = 0;
+        for (int i = 0; i < allCards.Length; i++)
+        {
+            if (used[i]) 
+                continue;
+            total++;
+            var c = allCards[i];
+            bool rankMatch = targetRank == null || c.rank == targetRank.Value;
+            bool suitMatch = targetSuit == null || c.suit == targetSuit.Value;
+            if (rankMatch && suitMatch) 
+                hit++;
+        }
+        return total == 0 ? 0f : (float)hit / total;
+    }
+
+    /// <summary>
+    /// All-in è·‘é©¬èƒœç‡ï¼ˆåŒæ­¥ç‰ˆæœ¬ï¼Œç²¾ç¡®æšä¸¾ï¼Œå«èµ¢ç‰Œç»„åˆå­˜å‚¨ï¼‰
+    /// </summary>
+    /// <param name="playerHands"></param>
+    /// <param name="communityCards"></param>
+    /// <param name="maxWinningCombosToStore"></param>
+    /// <returns></returns>
+    /// <exception cref="Exception"></exception>
+    public static List<PlayerOdds> CalculateAllInOdds(
+        List<List<Card>> playerHands,
+        List<Card> communityCards,
+        int maxWinningCombosToStore = 100)
+    {
+        int numPlayers = playerHands.Count;
+        if (numPlayers < 2) throw new Exception("è‡³å°‘éœ€è¦2åç©å®¶");
+
+        Card[] allCards = GetAllCardsArray();
+        bool[] used = new bool[52];
+        foreach (var hand in playerHands)
+            if (hand.Count != 2) throw new Exception("æ‰‹ç‰Œå¿…é¡»2å¼ ");
+        foreach (var hand in playerHands) MarkUsed(used, hand);
+        MarkUsed(used, communityCards);
+
+        List<Card> remaining = new List<Card>();
+        for (int i = 0; i < allCards.Length; i++)
+            if (!used[i]) remaining.Add(allCards[i]);
+
+        int slots = 5 - communityCards.Count;
+        int[] wins = new int[numPlayers];
+        int[] ties = new int[numPlayers];
+        List<Card[]>[] winningBoards = new List<Card[]>[numPlayers];
+        for (int i = 0; i < numPlayers; i++)
+            winningBoards[i] = new List<Card[]>();
+
+        int totalCombos = 0;
+
+        if (slots == 0)
+        {
+            totalCombos = 1;
+            var winners = DetermineWinners(playerHands, communityCards);
+            if (winners.Count == 1)
+            {
+                wins[winners[0]]++;
+                if (maxWinningCombosToStore > 0 && winningBoards[winners[0]].Count < maxWinningCombosToStore)
+                    winningBoards[winners[0]].Add(communityCards.ToArray());
+            }
+            else
+            {
+                foreach (int idx in winners)
+                {
+                    ties[idx]++;
+                    if (maxWinningCombosToStore > 0 && winningBoards[idx].Count < maxWinningCombosToStore)
+                        winningBoards[idx].Add(communityCards.ToArray());
+                }
+            }
+        }
+        else
+        {
+            int[] indices = new int[slots];
+            GenerateCombos(remaining, slots, 0, 0, indices, (combo) =>
+            {
+                totalCombos++;
+                List<Card> fullCommunity = new List<Card>(communityCards);
+                fullCommunity.AddRange(combo);
+                var winners = DetermineWinners(playerHands, fullCommunity);
+
+                if (winners.Count == 1)
+                {
+                    int idx = winners[0];
+                    wins[idx]++;
+                    if (maxWinningCombosToStore > 0 && winningBoards[idx].Count < maxWinningCombosToStore)
+                        winningBoards[idx].Add(fullCommunity.ToArray());
+                }
+                else
+                {
+                    foreach (int idx in winners)
+                    {
+                        ties[idx]++;
+                        if (maxWinningCombosToStore > 0 && winningBoards[idx].Count < maxWinningCombosToStore)
+                            winningBoards[idx].Add(fullCommunity.ToArray());
+                    }
+                }
+            });
+        }
+
+        List<PlayerOdds> results = new List<PlayerOdds>();
+        for (int i = 0; i < numPlayers; i++)
+        {
+            float win = (float)wins[i] / totalCombos;
+            float tie = (float)ties[i] / totalCombos;
+            results.Add(new PlayerOdds
+            {
+                playerIndex = i,
+                winRate = win,
+                tieRate = tie,
+                loseRate = 1f - win - tie,
+                winningBoards = winningBoards[i]
+            });
+        }
+        return results;
+    }
+
+    /// <summary>
+    /// All-in è·‘é©¬èƒœç‡ï¼ˆåç¨‹ç‰ˆæœ¬ï¼Œåˆ†å¸§è®¡ç®—ï¼Œå«èµ¢ç‰Œç»„åˆå­˜å‚¨ï¼‰
+    /// </summary>
+    /// <param name="playerHands"></param>
+    /// <param name="communityCards"></param>
+    /// <param name="onComplete"></param>
+    /// <param name="onProgress"></param>
+    /// <param name="maxWinningCombosToStore"></param>
+    /// <returns></returns>
+    /// <exception cref="Exception"></exception>
+    public static IEnumerator CalculateAllInOddsCoroutine(
+        List<List<Card>> playerHands,
+        List<Card> communityCards,
+        Action<List<PlayerOdds>> onComplete,
+        Action<float> onProgress = null,
+        int maxWinningCombosToStore = 100)
+    {
+        int numPlayers = playerHands.Count;
+        if (numPlayers < 2) throw new Exception("è‡³å°‘éœ€è¦2åç©å®¶");
+
+        Card[] allCards = GetAllCardsArray();
+        bool[] used = new bool[52];
+        foreach (var hand in playerHands)
+            if (hand.Count != 2) throw new Exception("æ‰‹ç‰Œå¿…é¡»2å¼ ");
+        foreach (var hand in playerHands) MarkUsed(used, hand);
+        MarkUsed(used, communityCards);
+
+        List<Card> remaining = new List<Card>();
+        for (int i = 0; i < allCards.Length; i++)
+            if (!used[i]) remaining.Add(allCards[i]);
+
+        int slots = 5 - communityCards.Count;
+        int[] wins = new int[numPlayers];
+        int[] ties = new int[numPlayers];
+        List<Card[]>[] winningBoards = new List<Card[]>[numPlayers];
+        for (int i = 0; i < numPlayers; i++)
+            winningBoards[i] = new List<Card[]>();
+
+        long totalCombos = CombinationCount(remaining.Count, slots);
+        if (totalCombos == 0)
+        {
+            var winners = DetermineWinners(playerHands, communityCards);
+            if (winners.Count == 1)
+            {
+                wins[winners[0]] = 1;
+                if (maxWinningCombosToStore > 0 && winningBoards[winners[0]].Count < maxWinningCombosToStore)
+                    winningBoards[winners[0]].Add(communityCards.ToArray());
+            }
+            else
+            {
+                foreach (int idx in winners)
+                {
+                    ties[idx] = 1;
+                    if (maxWinningCombosToStore > 0 && winningBoards[idx].Count < maxWinningCombosToStore)
+                        winningBoards[idx].Add(communityCards.ToArray());
+                }
+            }
+            totalCombos = 1;
+        }
+        else
+        {
+            int[] indices = new int[slots];
+            for (int i = 0; i < slots; i++) indices[i] = i;
+            long processed = 0;
+            int batchSize = 50;
+            List<Card> combo = new List<Card>(slots);
+
+            while (true)
+            {
+                combo.Clear();
+                for (int i = 0; i < slots; i++) combo.Add(remaining[indices[i]]);
+
+                List<Card> fullCommunity = new List<Card>(communityCards);
+                fullCommunity.AddRange(combo);
+                var winners = DetermineWinners(playerHands, fullCommunity);
+
+                if (winners.Count == 1)
+                {
+                    int idx = winners[0];
+                    wins[idx]++;
+                    if (maxWinningCombosToStore > 0 && winningBoards[idx].Count < maxWinningCombosToStore)
+                        winningBoards[idx].Add(fullCommunity.ToArray());
+                }
+                else
+                {
+                    foreach (int idx in winners)
+                    {
+                        ties[idx]++;
+                        if (maxWinningCombosToStore > 0 && winningBoards[idx].Count < maxWinningCombosToStore)
+                            winningBoards[idx].Add(fullCommunity.ToArray());
+                    }
+                }
+
+                processed++;
+                if (processed % batchSize == 0)
+                {
+                    onProgress?.Invoke((float)processed / totalCombos);
+                    yield return null;
+                }
+
+                // ç”Ÿæˆä¸‹ä¸€ä¸ªç»„åˆ (next_combination)
+                int iIdx = slots - 1;
+                while (iIdx >= 0 && indices[iIdx] == remaining.Count - slots + iIdx)
+                    iIdx--;
+                if (iIdx < 0) break;
+                indices[iIdx]++;
+                for (int j = iIdx + 1; j < slots; j++)
+                    indices[j] = indices[j - 1] + 1;
+            }
+            onProgress?.Invoke(1f);
+        }
+
+        // ç»„è£…ç»“æœ
+        List<PlayerOdds> results = new List<PlayerOdds>();
+        for (int i = 0; i < numPlayers; i++)
+        {
+            float win = (float)wins[i] / totalCombos;
+            float tie = (float)ties[i] / totalCombos;
+            results.Add(new PlayerOdds
+            {
+                playerIndex = i,
+                winRate = win,
+                tieRate = tie,
+                loseRate = 1f - win - tie,
+                winningBoards = winningBoards[i]
+            });
+        }
+        onComplete?.Invoke(results);
+        yield return null;
+    }
+
+    // ==================== å†…éƒ¨è¾…åŠ©æ–¹æ³• ====================
+
+    private static long CombinationCount(int n, int k)
+    {
+        if (k < 0 || k > n) return 0;
+        if (k > n - k) k = n - k;
+        long result = 1;
+        for (int i = 1; i <= k; i++)
+        {
+            result *= (n - i + 1);
+            result /= i;
+        }
+        return result;
+    }
+
+    private static void GenerateCombos(List<Card> source, int k, int start, int depth, int[] indices, Action<List<Card>> callback)
+    {
+        if (depth == k)
+        {
+            List<Card> combo = new List<Card>();
+            for (int i = 0; i < k; i++) combo.Add(source[indices[i]]);
+            callback(combo);
+            return;
+        }
+        for (int i = start; i < source.Count; i++)
+        {
+            indices[depth] = i;
+            GenerateCombos(source, k, i + 1, depth + 1, indices, callback);
+        }
+    }
+
+    private static void MarkUsed(bool[] used, List<Card> cards)
+    {
+        foreach (var c in cards)
+        {
+            int idx = (int)c.suit * 13 + ((int)c.rank - 1);
+            used[idx] = true;
+        }
+    }
+
+    private static Card[] GetAllCardsArray()
+    {
+        Card[] deck = new Card[52];
+        int idx = 0;
+        foreach (Card.Suit suit in Enum.GetValues(typeof(Card.Suit)))
+            foreach (Card.Rank rank in Enum.GetValues(typeof(Card.Rank)))
+                deck[idx++] = new Card(suit, rank);
+        return deck;
+    }
+
+    public static HandType EvaluateBestHand(Card[] seven)
+    {
+        HandType best = HandType.HighCard;
+        for (int a = 0; a < 3; a++)
+            for (int b = a + 1; b < 4; b++)
+                for (int c = b + 1; c < 5; c++)
+                    for (int d = c + 1; d < 6; d++)
+                        for (int e = d + 1; e < 7; e++)
+                        {
+                            Card[] five = new Card[5] { seven[a], seven[b], seven[c], seven[d], seven[e] };
+                            HandType t = EvaluateFiveCards(five);
+                            if (t > best) best = t;
+                        }
+        return best;
+    }
+
+    private static HandType EvaluateFiveCards(Card[] five)
+    {
+        int[] values = five.Select(c => GetCardValue(c.rank)).ToArray();
+        Array.Sort(values);
+
+        bool flush = five.All(c => c.suit == five[0].suit);
+        bool straight = false;
+        bool distinct = values.Distinct().Count() == 5;
+        if (distinct)
+        {
+            if (values[4] - values[0] == 4) straight = true;
+            if (values[0] == 2 && values[1] == 3 && values[2] == 4 && values[3] == 5 && values[4] == 14)
+                straight = true;
+        }
+
+        var groups = five.GroupBy(c => GetCardValue(c.rank))
+                         .OrderByDescending(g => g.Count())
+                         .ThenByDescending(g => g.Key)
+                         .ToList();
+        int[] counts = groups.Select(g => g.Count()).ToArray();
+        int[] ranks = groups.Select(g => g.Key).ToArray();
+
+        if (flush && straight) return HandType.StraightFlush;
+        if (counts[0] == 4) return HandType.FourOfAKind;
+        if (counts[0] == 3 && counts.Length > 1 && counts[1] == 2) return HandType.FullHouse;
+        if (flush) return HandType.Flush;
+        if (straight) return HandType.Straight;
+        if (counts[0] == 3) return HandType.ThreeOfAKind;
+        if (counts[0] == 2 && counts.Length > 1 && counts[1] == 2) return HandType.TwoPair;
+        if (counts[0] == 2) return HandType.OnePair;
+        return HandType.HighCard;
+    }
+
+    // ---------- æ¯”è¾ƒç›¸å…³ ----------
     private class HandStrength
     {
         public HandType type;
-        public int[] tieBreakers; // ´Ó×îÖØÒªµ½´ÎÖØÒªÅÅÁĞµÄµãÊı£¨A=14£©
-
+        public int[] tieBreakers;
         public HandStrength(HandType type, int[] breakers)
         {
             this.type = type;
@@ -96,87 +571,52 @@ public static class PokerHandEvaluator
         }
     }
 
-    // ---------- ±È½ÏÁ½¸öÇ¿¶È ----------
-    private static int CompareStrength(HandStrength a, HandStrength b)
-    {
-        if (a.type != b.type)
-            return ((int)a.type).CompareTo((int)b.type);
-
-        // Í¬ÀàĞÍ£¬±È½ÏÌß½ÅÊı×é
-        for (int i = 0; i < Math.Min(a.tieBreakers.Length, b.tieBreakers.Length); i++)
-        {
-            if (a.tieBreakers[i] != b.tieBreakers[i])
-                return a.tieBreakers[i].CompareTo(b.tieBreakers[i]);
-        }
-        return 0; // ÍêÈ«ÏàµÈ
-    }
-
-    // ---------- »ñÈ¡5ÕÅÅÆµÄÇ¿¶È£¨ÀàĞÍ+Ìß½ÅµãÊı£© ----------
     private static HandStrength GetHandStrength(Card[] five)
     {
-        // 1. »ñÈ¡µãÊıÁĞ±í£¨ÓÃ14´ú±íAce£¬ÓÃÓÚ±È½Ï£©
         int[] values = five.Select(c => GetCardValue(c.rank)).ToArray();
-        Array.Sort(values); // ´ÓĞ¡µ½´óÅÅĞò
-
-        // 2. ¼ì²éÍ¬»¨
-        bool isFlush = five.All(c => c.suit == five[0].suit);
-
-        // 3. ¼ì²éË³×Ó£¨×¢ÒâAceµÄÌØÊâ´¦Àí£©
-        bool isStraight = false;
+        Array.Sort(values);
+        bool flush = five.All(c => c.suit == five[0].suit);
+        bool straight = false;
         bool distinct = values.Distinct().Count() == 5;
         if (distinct)
         {
-            // ³£¹æË³×Ó
-            if (values[4] - values[0] == 4)
-                isStraight = true;
-            // ÌØÊâ A-2-3-4-5  (´ËÊ±valuesÎª[2,3,4,5,14] µ«ÒòÎªAce=14£¬ÅÅĞòºóÊÇ[2,3,4,5,14])
-            // ¼ì²â£ºÈç¹û values[4]==14 ÇÒ values[0]==2 ÇÒ values[1]==3 && values[2]==4 && values[3]==5
+            if (values[4] - values[0] == 4) straight = true;
             if (values[0] == 2 && values[1] == 3 && values[2] == 4 && values[3] == 5 && values[4] == 14)
-                isStraight = true;
+                straight = true;
         }
 
-        // 4. Í³¼ÆµãÊıÆµÂÊ
         var groups = five.GroupBy(c => GetCardValue(c.rank))
                          .OrderByDescending(g => g.Count())
                          .ThenByDescending(g => g.Key)
                          .ToList();
-
         int[] counts = groups.Select(g => g.Count()).ToArray();
-        int[] rankValues = groups.Select(g => g.Key).ToArray(); // ´Ó¸ßÆµµ½µÍÆµ
+        int[] ranks = groups.Select(g => g.Key).ToArray();
 
-        // 5. ÅĞ¶ÏÅÆĞÍ²¢¹¹½¨Ìß½ÅÊı×é
         HandType type;
         int[] breakers;
 
-        if (isFlush && isStraight)
+        if (flush && straight)
         {
             type = HandType.StraightFlush;
-            // Ë³×Ó×î´óÅÆ£¨Èç¹ûÊÇA-2-3-4-5£¬×î´óÅÆÊÇ5£©
             int high = (values[4] == 14 && values[0] == 2) ? 5 : values[4];
             breakers = new int[] { high };
         }
         else if (counts[0] == 4)
         {
             type = HandType.FourOfAKind;
-            // ËÄÌõµãÊı + Ìß½Å
-            int fourRank = rankValues[0];
-            int kicker = rankValues[1]; // ÁíÒ»ÕÅÅÆ
-            breakers = new int[] { fourRank, kicker };
+            breakers = new int[] { ranks[0], ranks[1] };
         }
         else if (counts[0] == 3 && counts.Length > 1 && counts[1] == 2)
         {
             type = HandType.FullHouse;
-            int threeRank = rankValues[0];
-            int pairRank = rankValues[1];
-            breakers = new int[] { threeRank, pairRank };
+            breakers = new int[] { ranks[0], ranks[1] };
         }
-        else if (isFlush)
+        else if (flush)
         {
             type = HandType.Flush;
-            // ËùÓĞÅÆ´Ó´óµ½Ğ¡ÅÅÁĞ£¨½µĞò£©
             breakers = values.Reverse().ToArray();
         }
-        else if (isStraight)
+        else if (straight)
         {
             type = HandType.Straight;
             int high = (values[4] == 14 && values[0] == 2) ? 5 : values[4];
@@ -185,42 +625,51 @@ public static class PokerHandEvaluator
         else if (counts[0] == 3)
         {
             type = HandType.ThreeOfAKind;
-            int threeRank = rankValues[0];
-            // Á½¸öÌß½Å£¨´Ó´óµ½Ğ¡£©
-            int[] kickers = rankValues.Skip(1).OrderByDescending(x => x).ToArray();
-            breakers = new int[] { threeRank }.Concat(kickers).ToArray();
+            var kickers = ranks.Skip(1).OrderByDescending(x => x).ToArray();
+            breakers = new int[] { ranks[0] }.Concat(kickers).ToArray();
         }
-        else if (counts[0] == 2 && counts.Length >= 2 && counts[1] == 2)
+        else if (counts[0] == 2 && counts.Length > 1 && counts[1] == 2)
         {
             type = HandType.TwoPair;
-            int highPair = rankValues[0];
-            int lowPair = rankValues[1];
-            int kicker = rankValues[2]; // Ê£ÏÂµÄÒ»ÕÅ
+            int highPair = ranks[0];
+            int lowPair = ranks[1];
+            int kicker = ranks[2];
             breakers = new int[] { highPair, lowPair, kicker };
         }
         else if (counts[0] == 2)
         {
             type = HandType.OnePair;
-            int pairRank = rankValues[0];
-            // Èı¸öÌß½Å£¨´Ó´óµ½Ğ¡£©
-            int[] kickers = rankValues.Skip(1).OrderByDescending(x => x).ToArray();
-            breakers = new int[] { pairRank }.Concat(kickers).ToArray();
+            var kickers = ranks.Skip(1).OrderByDescending(x => x).ToArray();
+            breakers = new int[] { ranks[0] }.Concat(kickers).ToArray();
         }
         else
         {
             type = HandType.HighCard;
-            // ËùÓĞÅÆ´Ó´óµ½Ğ¡
             breakers = values.Reverse().ToArray();
         }
 
         return new HandStrength(type, breakers);
     }
 
-    // ---------- ¸¨Öú£º»ñÈ¡µãÊıµÄ±È½ÏÖµ£¨Ace=14£© ----------
+    private static int CompareStrength(HandStrength a, HandStrength b)
+    {
+        if (a.type != b.type)
+            return ((int)a.type).CompareTo((int)b.type);
+        for (int i = 0; i < Math.Min(a.tieBreakers.Length, b.tieBreakers.Length); i++)
+        {
+            if (a.tieBreakers[i] != b.tieBreakers[i])
+                return a.tieBreakers[i].CompareTo(b.tieBreakers[i]);
+        }
+        return 0;
+    }
+
+    private static int CompareFiveCardHands(Card[] handA, Card[] handB)
+    {
+        return CompareStrength(GetHandStrength(handA), GetHandStrength(handB));
+    }
+
     private static int GetCardValue(Card.Rank rank)
     {
-        if (rank == Card.Rank.Ace)
-            return 14;
-        return (int)rank; // 2..13
+        return rank == Card.Rank.Ace ? 14 : (int)rank;
     }
 }
