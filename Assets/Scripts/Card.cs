@@ -1,9 +1,12 @@
 ﻿using System;
 
+[Serializable]
 public struct Card
 {
-    public enum Suit { 黑桃, 红桃, 梅花, 方块 }
+    [Serializable]
+    public enum Suit { c, h, s, d }
 
+    [Serializable]
     public enum Rank
     {
         Ace = 1,
@@ -32,6 +35,6 @@ public struct Card
 
     public override string ToString()
     {
-        return $"{suit} {rank}";
+        return $"{suit}" + (int)rank;
     }
 }
